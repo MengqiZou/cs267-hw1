@@ -12,16 +12,24 @@ const char* dgemm_desc = "Simple blocked dgemm.";
  * where C is M-by-N, A is M-by-K, and B is K-by-N.
  */
 static void do_block(int lda, int M, int N, int K, double* A, double* B, double* C) {
-    // For each row i of A
-    for (int i = 0; i < M; ++i) {
-        // For each column j of B
+    // __m256d C_val[4];
+    for(int i = 0; i < M; ++i) {
+
         for (int j = 0; j < N; ++j) {
-            // Compute C(i,j)
-            double cij = C[i + j * lda];
-            for (int k = 0; k < K; ++k) {
-                cij += A[i + k * lda] * B[k + j * lda];
+            __m256d C_val = _mm256_load_pd(&C[i+j*lda]);
+
+            for (int k = 0; k < K; k+=4) {
+
+                // load elements from memory into registers
+                __m256d A_val = _mm256_load_pd(&A[i+k*lda]);
+                __m256d B_val = _mm256_load_pd(&B[k+j*lda]);
+            
+                // compute
+                C_val = _mm256_fmadd_pd(A_val, B_val, C_val);
             }
-            C[i + j * lda] = cij;
+
+        // store
+        _mm256_store_pd(&C[i+j*lda], C_val);
         }
     }
 }
