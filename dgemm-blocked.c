@@ -1,6 +1,6 @@
 #include <immintrin.h>
 
-const char* dgemm_desc = "simd ijk blocksize32 vector256.";
+const char* dgemm_desc = "simd ijk blocksize32 j+=8 vector256.";
 
 #ifndef BLOCK_SIZE
 #define BLOCK_SIZE 32
@@ -18,14 +18,19 @@ const char* dgemm_desc = "simd ijk blocksize32 vector256.";
 static void do_block(int lda, int M, int N, int K, double* A, double* B, double* C) {
     int i = 0, j = 0, k = 0;
 
+    // **AVX-optimized loop processing 8 columns at a time**
+    for (i = 0; i + 4 <= M; i += 4) {  
+        for (j = 0; j + 8 <= N; j += 8) {  
 
-    for (i = 0; i + 4 <= M; i += 4) { 
-        for (j = 0; j + 4 <= N; j += 4) { 
-    
+            // Load C(i:i+4, j:j+8)
             __m256d C0 = _mm256_loadu_pd(&C[i + (j + 0) * lda]);
             __m256d C1 = _mm256_loadu_pd(&C[i + (j + 1) * lda]);
             __m256d C2 = _mm256_loadu_pd(&C[i + (j + 2) * lda]);
             __m256d C3 = _mm256_loadu_pd(&C[i + (j + 3) * lda]);
+            __m256d C4 = _mm256_loadu_pd(&C[i + (j + 4) * lda]);
+            __m256d C5 = _mm256_loadu_pd(&C[i + (j + 5) * lda]);
+            __m256d C6 = _mm256_loadu_pd(&C[i + (j + 6) * lda]);
+            __m256d C7 = _mm256_loadu_pd(&C[i + (j + 7) * lda]);
 
             for (k = 0; k < K; ++k) {  
                 __m256d A0 = _mm256_loadu_pd(&A[i + k * lda]);
@@ -34,26 +39,43 @@ static void do_block(int lda, int M, int N, int K, double* A, double* B, double*
                 __m256d B1 = _mm256_set1_pd(B[k + (j + 1) * lda]);
                 __m256d B2 = _mm256_set1_pd(B[k + (j + 2) * lda]);
                 __m256d B3 = _mm256_set1_pd(B[k + (j + 3) * lda]);
+                __m256d B4 = _mm256_set1_pd(B[k + (j + 4) * lda]);
+                __m256d B5 = _mm256_set1_pd(B[k + (j + 5) * lda]);
+                __m256d B6 = _mm256_set1_pd(B[k + (j + 6) * lda]);
+                __m256d B7 = _mm256_set1_pd(B[k + (j + 7) * lda]);
 
                 C0 = _mm256_fmadd_pd(A0, B0, C0);
                 C1 = _mm256_fmadd_pd(A0, B1, C1);
                 C2 = _mm256_fmadd_pd(A0, B2, C2);
                 C3 = _mm256_fmadd_pd(A0, B3, C3);
+                C4 = _mm256_fmadd_pd(A0, B4, C4);
+                C5 = _mm256_fmadd_pd(A0, B5, C5);
+                C6 = _mm256_fmadd_pd(A0, B6, C6);
+                C7 = _mm256_fmadd_pd(A0, B7, C7);
             }
 
             _mm256_storeu_pd(&C[i + (j + 0) * lda], C0);
             _mm256_storeu_pd(&C[i + (j + 1) * lda], C1);
             _mm256_storeu_pd(&C[i + (j + 2) * lda], C2);
             _mm256_storeu_pd(&C[i + (j + 3) * lda], C3);
+            _mm256_storeu_pd(&C[i + (j + 4) * lda], C4);
+            _mm256_storeu_pd(&C[i + (j + 5) * lda], C5);
+            _mm256_storeu_pd(&C[i + (j + 6) * lda], C6);
+            _mm256_storeu_pd(&C[i + (j + 7) * lda], C7);
         }
     }
 
-    for (; i < M; i++) { 
-        for (j = 0; j + 4 <= N; j += 4) {
+    // **Handle M % 4 remaining rows**
+    for (; i < M; i++) {  
+        for (j = 0; j + 8 <= N; j += 8) {
             double C0 = C[i + (j + 0) * lda];
             double C1 = C[i + (j + 1) * lda];
             double C2 = C[i + (j + 2) * lda];
             double C3 = C[i + (j + 3) * lda];
+            double C4 = C[i + (j + 4) * lda];
+            double C5 = C[i + (j + 5) * lda];
+            double C6 = C[i + (j + 6) * lda];
+            double C7 = C[i + (j + 7) * lda];
 
             for (k = 0; k < K; ++k) {
                 double A0 = A[i + k * lda];
@@ -62,21 +84,34 @@ static void do_block(int lda, int M, int N, int K, double* A, double* B, double*
                 double B1 = B[k + (j + 1) * lda];
                 double B2 = B[k + (j + 2) * lda];
                 double B3 = B[k + (j + 3) * lda];
+                double B4 = B[k + (j + 4) * lda];
+                double B5 = B[k + (j + 5) * lda];
+                double B6 = B[k + (j + 6) * lda];
+                double B7 = B[k + (j + 7) * lda];
 
                 C0 += A0 * B0;
                 C1 += A0 * B1;
                 C2 += A0 * B2;
                 C3 += A0 * B3;
+                C4 += A0 * B4;
+                C5 += A0 * B5;
+                C6 += A0 * B6;
+                C7 += A0 * B7;
             }
 
             C[i + (j + 0) * lda] = C0;
             C[i + (j + 1) * lda] = C1;
             C[i + (j + 2) * lda] = C2;
             C[i + (j + 3) * lda] = C3;
+            C[i + (j + 4) * lda] = C4;
+            C[i + (j + 5) * lda] = C5;
+            C[i + (j + 6) * lda] = C6;
+            C[i + (j + 7) * lda] = C7;
         }
     }
 
-    for (; j < N; ++j) { 
+    // **Handle remaining columns**
+    for (; j < N; ++j) {  
         for (i = 0; i < M; ++i) {
             double sum = C[i + j * lda];
             for (k = 0; k < K; ++k) {
