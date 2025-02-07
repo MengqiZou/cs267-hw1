@@ -1,9 +1,14 @@
 #include <immintrin.h>
 
-const char* dgemm_desc = "simd ijk blocksize32 j+=8 vector256.";
+const char* dgemm_desc = "simd ijk block1 32 block2 128 j+=8 vector256.";
 
-#ifndef BLOCK_SIZE
-#define BLOCK_SIZE 32
+#ifndef BLOCK_SIZE1
+#define BLOCK_SIZE1 32
+#endif
+
+
+#ifndef BLOCK_SIZE2
+#define BLOCK_SIZE2 128
 #endif
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
@@ -132,19 +137,37 @@ static void do_block(int lda, int M, int N, int K, double* A, double* B, double*
  * where A, B, and C are lda-by-lda matrices stored in column-major format.
  * On exit, A and B maintain their input values. */
 void square_dgemm(int lda, double* A, double* B, double* C) {
-    // For each block-row of A
-    for (int i = 0; i < lda; i += BLOCK_SIZE) {
-        // For each block-column of B
-        for (int j = 0; j < lda; j += BLOCK_SIZE) {
-            // Accumulate block dgemms into block of C
-            for (int k = 0; k < lda; k += BLOCK_SIZE) {
-                // Correct block dimensions if block "goes off edge of" the matrix
-                int M = min(BLOCK_SIZE, lda - i);
-                int N = min(BLOCK_SIZE, lda - j);
-                int K = min(BLOCK_SIZE, lda - k);
-                // Perform individual block dgemm
-                do_block(lda, M, N, K, A + i + k * lda, B + k + j * lda, C + i + j * lda);
+
+  for (int block_k = 0; block_k < lda; block_k += BLOCK_SIZE2) 
+{
+
+  for (int block_j = 0; block_j < lda; block_j += BLOCK_SIZE2) 
+  {
+
+      for (int block_i = 0; block_i < lda; block_i += BLOCK_SIZE2) 
+      {
+
+          int limit_k = block_k + min(BLOCK_SIZE2, lda - block_k);
+          int limit_j = block_j + min(BLOCK_SIZE2, lda - block_j);
+          int limit_i = block_i + min(BLOCK_SIZE2, lda - block_i);
+
+        for (int k = block_k; k < limit_k; k += BLOCK_SIZE1) 
+        {
+
+          for (int j = block_j; j < limit_j; j += BLOCK_SIZE1) 
+          {
+
+            for (int i = block_i; i < limit_i; i += BLOCK_SIZE1) 
+            {
+      
+              int K = min(BLOCK_SIZE1, limit_k - k);
+              int N = min(BLOCK_SIZE1, limit_j - j);
+              int M = min(BLOCK_SIZE1, limit_i - i);
+              do_block(lda, M, N, K, A + i + k*lda, B + k + j*lda, C + i + j*lda);
             }
+          }
         }
+      }
     }
+  }
 }
